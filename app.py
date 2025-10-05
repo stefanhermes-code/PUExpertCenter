@@ -861,6 +861,11 @@ def main():
             st.session_state.question_input = ""
         if 'auto_run' not in st.session_state:
             st.session_state.auto_run = False
+        # Apply any pending sample selection before rendering the widget
+        if st.session_state.get('apply_pending_question', False):
+            st.session_state.question_input = st.session_state.get('pending_question', '')
+            st.session_state.auto_run = True
+            st.session_state.apply_pending_question = False
 
         # Question input
         question = st.text_area(
@@ -997,8 +1002,8 @@ def main():
 
         for q in sample_questions:
             if st.button(q, key=f"sample_btn_{hash(q)}"):
-                st.session_state.question_input = q
-                st.session_state.auto_run = True
+                st.session_state.pending_question = q
+                st.session_state.apply_pending_question = True
                 st.rerun()
 
 if __name__ == "__main__":
