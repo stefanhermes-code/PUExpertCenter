@@ -851,7 +851,7 @@ def main():
                 st.caption("No logs yet.")
 
     # Main interface
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([3, 1])
 
     with col1:
         st.header("💬 Ask a Question")
@@ -867,7 +867,12 @@ def main():
             "Enter your PU question:",
             value=st.session_state.question_input,
             placeholder="e.g., What are the main factors affecting foam density in flexible PU foams?",
-            height=100
+            height=100,
+            help=None,
+            key="question_text_area",
+            label_visibility="visible",
+            max_chars=None,
+            disabled=False
         )
         st.session_state.question_input = question
 
