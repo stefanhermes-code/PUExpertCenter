@@ -16,6 +16,30 @@ from PIL import Image
 # Load environment variables
 load_dotenv()
 
+# Flexible resolver for documents directory (accepts multiple name variants)
+from typing import Optional
+
+def resolve_documents_dir() -> Optional[str]:
+    base_dir = Path(__file__).parent
+    # Look in current dir first
+    candidates = [p for p in base_dir.iterdir() if p.is_dir()]
+    # Also consider repo root (when app is in a subfolder on Streamlit)
+    repo_root = Path('.')
+    try:
+        candidates += [p for p in repo_root.iterdir() if p.is_dir()]
+    except Exception:
+        pass
+    acceptable = {"document database", "documents database"}
+    for p in candidates:
+        try:
+            if p.name.lower() in acceptable:
+                return str(p)
+        except Exception:
+            continue
+    # Fallback to conventional path relative to file
+    fallback = base_dir / "Document Database"
+    return str(fallback) if fallback.exists() else None
+
 class PUExpertCenterMinimal:
     def __init__(self):
         # Try Streamlit secrets first, fallback to environment variables
@@ -680,11 +704,16 @@ def main():
     with st.sidebar:
         st.header("📚 Document Management")
         
+        documents_dir = resolve_documents_dir()
+        if not documents_dir:
+            st.error("Documents folder not found. Create 'Document Database' (or 'documents database') at repo root.")
+            documents_dir = "./Document Database"  # keep UI functional
+        
         # Check for new files first
-        new_files_count = st.session_state.rag_system.check_for_new_files("./Document Database")
+        new_files_count = st.session_state.rag_system.check_for_new_files(documents_dir)
         
         if st.session_state.rag_system.processed:
-            total_available = len(st.session_state.rag_system._get_document_files("./Document Database"))
+            total_available = len(st.session_state.rag_system._get_document_files(documents_dir))
             processed_files = len({d.get('file_path') for d in st.session_state.rag_system.documents if d.get('file_path')})
             actual_new_files = max(0, total_available - processed_files)
         else:
@@ -703,7 +732,7 @@ def main():
                     else:
                         try:
                             with st.spinner(f"Loading new documents... ({current_user} is processing)"):
-                                st.session_state.rag_system.process_documents("./Document Database")
+                                st.session_state.rag_system.process_documents(documents_dir)
                                 if st.session_state.rag_system.processed:
                                     st.success(f"✅ Successfully processed {len({d.get('file_path') for d in st.session_state.rag_system.documents})} files!")
                                     st.rerun()
@@ -721,7 +750,7 @@ def main():
         
         # Statistics section
         st.markdown("### 📊 Quick Stats")
-        doc_files = st.session_state.rag_system._get_document_files("./Document Database")
+        doc_files = st.session_state.rag_system._get_document_files(documents_dir)
         total_available = len(doc_files)
         
         if total_available > 0:
