@@ -994,11 +994,13 @@ def main():
             "What are typical compression set values for automotive foams?",
             "How does temperature affect gel time in PU systems?"
         ]
+
+        def _select_sample(q_text: str):
+            st.session_state.question_input = q_text
+            st.session_state.auto_run = True
+
         for q in sample_questions:
-            if st.button(q, key=f"sample_btn_{q}"):
-                st.session_state.question_input = q
-                st.session_state.auto_run = True
-                st.rerun()
+            st.button(q, key=f"sample_btn_{hash(q)}", on_click=_select_sample, args=(q,))
 
 if __name__ == "__main__":
     main()
