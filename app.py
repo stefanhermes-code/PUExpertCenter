@@ -712,7 +712,7 @@ def main():
         except:
             st.markdown("🧪")  # Fallback if logo not found
     with col2:
-        st.title("PU ExpertCenter: Polyurethane ExpertCenter")
+        st.title("PU ExpertCenter")
     
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications")
     
