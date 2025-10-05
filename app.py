@@ -869,12 +869,12 @@ def main():
             placeholder="e.g., What are the main factors affecting foam density in flexible PU foams?",
             height=100,
             help=None,
-            key="question_text_area",
+            key="question_input",
             label_visibility="visible",
             max_chars=None,
             disabled=False
         )
-        st.session_state.question_input = question
+        # Bound to session via key="question_input"
 
         def run_query(q: str):
             with st.spinner("Searching knowledge base and generating answer..."):
