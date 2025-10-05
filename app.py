@@ -650,7 +650,7 @@ def main():
     col1, col2 = st.columns([1, 4])
     with col1:
         try:
-            st.image("assets/PU ExpertCenter Logo.png", width=120)
+            st.image("PU ExpertCenter Logo V1.png", width=120)
         except:
             st.markdown("🧪")  # Fallback if logo not found
     with col2:
