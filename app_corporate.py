@@ -17,6 +17,30 @@ from typing import Dict
 # Load environment variables
 load_dotenv()
 
+# Flexible resolver for documents directory (accepts multiple name variants)
+from typing import Optional
+
+def resolve_documents_dir() -> Optional[str]:
+    base_dir = Path(__file__).parent
+    # Look in current dir first
+    candidates = [p for p in base_dir.iterdir() if p.is_dir()]
+    # Also consider repo root (when app is in a subfolder on Streamlit)
+    repo_root = Path('.')
+    try:
+        candidates += [p for p in repo_root.iterdir() if p.is_dir()]
+    except Exception:
+        pass
+    acceptable = {"document database", "documents database"}
+    for p in candidates:
+        try:
+            if p.name.lower() in acceptable:
+                return str(p)
+        except Exception:
+            continue
+    # Fallback to conventional path relative to file
+    fallback = base_dir / "Document Database"
+    return str(fallback) if fallback.exists() else None
+
 class PUExpertCenterMinimal:
     def __init__(self):
         # Try Streamlit secrets first, fallback to environment variables
@@ -576,8 +600,13 @@ def main():
     
     # Process documents automatically on first load
     if not st.session_state.rag_system.processed:
+        documents_dir = resolve_documents_dir()
+        if not documents_dir:
+            st.error("Documents folder not found. Create 'Document Database' (or 'documents database') at repo root.")
+            documents_dir = "./Document Database"  # keep UI functional
+        
         with st.spinner("Loading PU knowledge base..."):
-            st.session_state.rag_system.process_documents("./Document Database")
+            st.session_state.rag_system.process_documents(documents_dir)
     
     # Main interface
     col1, col2 = st.columns([2, 1])
