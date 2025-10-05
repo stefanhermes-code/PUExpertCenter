@@ -995,13 +995,11 @@ def main():
             "How does temperature affect gel time in PU systems?"
         ]
 
-        def _select_sample(q_text: str):
-            st.session_state.question_input = q_text
-            st.session_state.auto_run = True
-            st.rerun()
-
         for q in sample_questions:
-            st.button(q, key=f"sample_btn_{hash(q)}", on_click=_select_sample, args=(q,))
+            if st.button(q, key=f"sample_btn_{hash(q)}"):
+                st.session_state.question_input = q
+                st.session_state.auto_run = True
+                st.rerun()
 
 if __name__ == "__main__":
     main()
