@@ -870,14 +870,9 @@ def main():
         # Question input
         question = st.text_area(
             "Enter your PU question:",
-            value=st.session_state.question_input,
             placeholder="e.g., What are the main factors affecting foam density in flexible PU foams?",
             height=100,
-            help=None,
             key="question_input",
-            label_visibility="visible",
-            max_chars=None,
-            disabled=False
         )
         # Bound to session via key="question_input"
 
