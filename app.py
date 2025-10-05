@@ -448,6 +448,40 @@ class PUExpertCenterMinimal:
         except Exception:
             pass
     
+    def _read_progress(self) -> dict:
+        try:
+            if self.progress_path.exists():
+                with open(self.progress_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def _get_recent_log_lines(self, max_lines: int = 50) -> list:
+        try:
+            if self.log_file.exists():
+                with open(self.log_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                return lines[-max_lines:]
+        except Exception:
+            pass
+        return []
+
+    def _clear_cache_and_chunks(self):
+        try:
+            if self.cache_path.exists():
+                self.cache_path.unlink()
+        except Exception:
+            pass
+        try:
+            if self.chunks_store_path.exists():
+                self.chunks_store_path.unlink()
+        except Exception:
+            pass
+        self._processed_index = {}
+        self.documents = []
+        self.processed = False
+    
     def _save_cache(self):
         try:
             with open(self.cache_path, 'w', encoding='utf-8') as f:
@@ -648,24 +682,24 @@ def main():
     st.markdown("""
     <style>
     .css-1d391kg {
-        width: 500px !important;
-        max-width: 500px !important;
+        width: 360px !important;
+        max-width: 360px !important;
     }
     .css-1lcbmhc .css-1d391kg {
-        width: 500px !important;
-        max-width: 500px !important;
+        width: 360px !important;
+        max-width: 360px !important;
     }
     .sidebar .sidebar-content {
-        width: 500px !important;
-        max-width: 500px !important;
+        width: 360px !important;
+        max-width: 360px !important;
     }
     [data-testid="stSidebar"] {
-        width: 500px !important;
-        min-width: 500px !important;
+        width: 360px !important;
+        min-width: 360px !important;
     }
     [data-testid="stSidebar"] > div {
-        width: 500px !important;
-        min-width: 500px !important;
+        width: 360px !important;
+        min-width: 360px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -703,12 +737,12 @@ def main():
     # Sidebar for document processing and statistics
     with st.sidebar:
         st.header("📚 Document Management")
-        
         documents_dir = resolve_documents_dir()
         if not documents_dir:
             st.error("Documents folder not found. Create 'Document Database' (or 'documents database') at repo root.")
             documents_dir = "./Document Database"  # keep UI functional
-        
+        st.caption(f"Folder: {documents_dir}")
+
         # Check for new files first
         new_files_count = st.session_state.rag_system.check_for_new_files(documents_dir)
         
@@ -772,6 +806,49 @@ def main():
             st.metric("Files Processed", 0)
             if total_available > 0:
                 st.metric("New Files", total_available)
+
+        # Advanced controls (similar to SustainaCube)
+        st.markdown("---")
+        st.markdown("### ⚙️ Actions")
+        colA, colB = st.columns(2)
+        with colA:
+            if st.button("♻️ Rebuild Index", help="Reprocess all documents and rebuild cache"):
+                acquired, who = st.session_state.rag_system._acquire_lock(current_user)
+                if not acquired:
+                    st.error(f"Cannot rebuild - {who} is processing")
+                else:
+                    try:
+                        st.session_state.rag_system._clear_cache_and_chunks()
+                        with st.spinner("Rebuilding index from documents..."):
+                            st.session_state.rag_system.process_documents(documents_dir)
+                        st.success("Rebuild complete")
+                        st.rerun()
+                    finally:
+                        st.session_state.rag_system._release_lock()
+        with colB:
+            if st.button("🧹 Clear Cache", help="Remove processed cache and chunks (keeps files)"):
+                st.session_state.rag_system._clear_cache_and_chunks()
+                st.success("Cache cleared. Click 'Load New Documents' to reprocess.")
+
+        if st.button("🔓 Release Lock", help="Force release processing lock if stuck"):
+            st.session_state.rag_system._release_lock()
+            st.success("Lock released")
+
+        # Progress and logs
+        with st.expander("⏱️ Processing Status", expanded=False):
+            prog = st.session_state.rag_system._read_progress()
+            if prog:
+                st.write(prog)
+            else:
+                st.caption("No active processing status.")
+
+        with st.expander("🪵 Recent Logs", expanded=False):
+            lines = st.session_state.rag_system._get_recent_log_lines(80)
+            if lines:
+                st.code("".join(lines))
+                st.download_button("Download Logs", data="".join(lines), file_name="processing_log.txt")
+            else:
+                st.caption("No logs yet.")
 
     # Main interface
     col1, col2 = st.columns([1, 1])
