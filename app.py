@@ -580,10 +580,21 @@ class PUExpertCenterMinimal:
         return doc_files
     
     def check_for_new_files(self, doc_dir: str) -> int:
-        """Check for new or updated files without processing them"""
+        """Check for new or updated files without processing them (excludes failed files)"""
         if not os.path.exists(doc_dir):
             return 0
-        return len(self._get_document_files(doc_dir))
+        
+        all_files = self._get_document_files(doc_dir)
+        failed_files = self._get_failed_files()
+        
+        # Filter out failed files from the count
+        valid_files = []
+        for file_path in all_files:
+            file_name = Path(file_path).name
+            if file_name not in failed_files:
+                valid_files.append(file_path)
+        
+        return len(valid_files)
     
     def _log(self, level, message, file_path=None):
         """Add entry to processing log"""
@@ -626,6 +637,37 @@ class PUExpertCenterMinimal:
             for file_path, reason in skipped_files.items():
                 f.write(f"  - {file_path}: {reason}\n")
             f.write(f"{'='*60}\n\n")
+        
+        # Write failed files to separate log
+        self._write_failed_files_log(failed_files)
+    
+    def _write_failed_files_log(self, failed_files):
+        """Write failed files to a separate, easily readable log"""
+        failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+        with open(failed_log_path, "w", encoding="utf-8") as f:
+            f.write(f"FAILED FILES LOG - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"{'='*50}\n\n")
+            if failed_files:
+                for file_path, reason in failed_files.items():
+                    f.write(f"❌ FAILED: {Path(file_path).name}\n")
+                    f.write(f"   Path: {file_path}\n")
+                    f.write(f"   Reason: {reason}\n")
+                    f.write(f"   {'-'*40}\n")
+            else:
+                f.write("✅ No files failed to process.\n")
+    
+    def _get_failed_files(self):
+        """Get list of failed files from the failed files log"""
+        failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+        failed_files = []
+        if failed_log_path.exists():
+            with open(failed_log_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                # Extract failed file paths
+                import re
+                failed_matches = re.findall(r"❌ FAILED: (.+?)\n", content)
+                failed_files = [match.strip() for match in failed_matches]
+        return failed_files
     
     def _acquire_lock(self, user_name):
         """Acquire application lock to prevent conflicts"""
@@ -849,6 +891,28 @@ def main():
                 st.download_button("Download Logs", data="".join(lines), file_name="processing_log.txt")
             else:
                 st.caption("No logs yet.")
+        
+        # Failed files section
+        failed_files = st.session_state.rag_system._get_failed_files()
+        if failed_files:
+            with st.expander("❌ Failed Files", expanded=False):
+                st.warning(f"{len(failed_files)} files failed to process")
+                for failed_file in failed_files:
+                    st.text(f"• {failed_file}")
+                
+                # Download failed files log
+                failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+                if failed_log_path.exists():
+                    with open(failed_log_path, "r", encoding="utf-8") as f:
+                        failed_log_content = f.read()
+                    st.download_button(
+                        "Download Failed Files Log", 
+                        data=failed_log_content, 
+                        file_name="failed_files_log.txt",
+                        mime="text/plain"
+                    )
+        else:
+            st.success("✅ No failed files")
 
     # Main interface
     col1, col2 = st.columns([3, 1])
