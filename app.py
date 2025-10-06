@@ -71,34 +71,55 @@ class PUExpertCenterMinimal:
         try:
             file_path = Path(file_path)
             if file_path.suffix.lower() == '.pdf':
-                with open(file_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    text = ""
-                    for page in pdf_reader.pages:
-                        text += page.extract_text() + "\n"
+                # Try multiple PDF extraction methods
+                text = ""
+                
+                # Method 1: Try PyMuPDF first (often better than PyPDF2)
+                try:
+                    import fitz
+                    doc = fitz.open(file_path)
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+                        text += page.get_text() + "\n"
+                    doc.close()
+                    if text.strip():
+                        return text
+                except Exception as e:
+                    print(f"PyMuPDF failed for {file_path.name}: {e}")
+                
+                # Method 2: Try PyPDF2
+                try:
+                    with open(file_path, 'rb') as file:
+                        pdf_reader = PyPDF2.PdfReader(file)
+                        text = ""
+                        for page in pdf_reader.pages:
+                            text += page.extract_text() + "\n"
+                    if text.strip():
+                        return text
+                except Exception as e:
+                    print(f"PyPDF2 failed for {file_path.name}: {e}")
+                
+                # Method 3: Try OCR as last resort
+                try:
+                    import pytesseract
+                    from PIL import Image
+                    import fitz
                     
-                    # If no text extracted, try OCR
-                    if not text.strip():
-                        try:
-                            import pytesseract
-                            from PIL import Image
-                            import fitz  # PyMuPDF for better PDF handling
-                            
-                            doc = fitz.open(file_path)
-                            ocr_text = ""
-                            for page_num in range(len(doc)):
-                                page = doc.load_page(page_num)
-                                pix = page.get_pixmap()
-                                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                                ocr_text += pytesseract.image_to_string(img) + "\n"
-                            doc.close()
-                            return ocr_text if ocr_text.strip() else ""
-                        except ImportError:
-                            return f"[PDF file: {file_path.name} - OCR libraries not installed]"
-                        except Exception as e:
-                            return f"[PDF file: {file_path.name} - OCR failed: {str(e)}]"
-                    
-                    return text
+                    doc = fitz.open(file_path)
+                    ocr_text = ""
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+                        pix = page.get_pixmap()
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        ocr_text += pytesseract.image_to_string(img) + "\n"
+                    doc.close()
+                    if ocr_text.strip():
+                        return ocr_text
+                except Exception as e:
+                    print(f"OCR failed for {file_path.name}: {e}")
+                
+                # If all methods failed, return a message indicating the issue
+                return f"[PDF file: {file_path.name} - All extraction methods failed. File may be image-based or corrupted.]"
             elif file_path.suffix.lower() == '.docx':
                 doc = Document(file_path)
                 text = ""
@@ -676,21 +697,15 @@ class PUExpertCenterMinimal:
         if self.log_file.exists():
             with open(self.log_file, "r", encoding="utf-8") as f:
                 content = f.read()
-                # Extract skipped file paths from log - look for various patterns
+                # Extract skipped file paths from log - look for the actual pattern in the log
                 import re
-                patterns = [
-                    r"Skipping unchanged file:\s*(.+?)(?:\n|$)",
-                    r"No text extracted from:\s*(.+?)(?:\n|$)",
-                    r"Skipped \(duplicates/unchanged\):\s*(.+?)(?:\n|$)",
-                    r"Skipped.*?:\s*(.+?)(?:\n|$)"
-                ]
-                for pattern in patterns:
-                    matches = re.findall(pattern, content, re.IGNORECASE)
-                    for match in matches:
-                        # Extract just the filename from full path
-                        filename = Path(match.strip()).name
-                        if filename and filename not in skipped_files:
-                            skipped_files.append(filename)
+                # Pattern: "  - documents database/filename.pdf: No text content"
+                pattern = r"  - documents database/(.+?): No text content"
+                matches = re.findall(pattern, content)
+                for match in matches:
+                    filename = match.strip()
+                    if filename and filename not in skipped_files:
+                        skipped_files.append(filename)
         return skipped_files
     
     def _acquire_lock(self, user_name):
@@ -926,6 +941,36 @@ def main():
                 file_name="full_processing_log.txt",
                 mime="text/plain",
                 help="Download complete processing log to analyze skipped files"
+            )
+        
+        # Failed files log download
+        failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+        if failed_log_path.exists():
+            with open(failed_log_path, "r", encoding="utf-8") as f:
+                failed_log_content = f.read()
+            st.download_button(
+                "📥 Download Failed Files Log", 
+                data=failed_log_content, 
+                file_name="failed_files_log.txt",
+                mime="text/plain",
+                help="Download detailed log of files that failed to process"
+            )
+        
+        # Skipped files log download (extract from main log)
+        skipped_files = st.session_state.rag_system._get_skipped_files()
+        if skipped_files:
+            skipped_log_content = "SKIPPED FILES LOG\n" + "="*50 + "\n\n"
+            for filename in skipped_files:
+                skipped_log_content += f"❌ SKIPPED: {filename}\n"
+                skipped_log_content += f"   Reason: No text content extracted\n"
+                skipped_log_content += f"   {'-'*40}\n"
+            
+            st.download_button(
+                "📥 Download Skipped Files Log", 
+                data=skipped_log_content, 
+                file_name="skipped_files_log.txt",
+                mime="text/plain",
+                help="Download list of files that were skipped (no text content)"
             )
         
         # Failed and skipped files section
