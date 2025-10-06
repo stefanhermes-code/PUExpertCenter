@@ -345,7 +345,7 @@ class PUExpertCenterMinimal:
                 pattern = r"  - documents database/(.+?): No text content"
                 matches = re.findall(pattern, content)
                 for match in matches:
-                    filename = match.strip()
+                    filename = Path(match.strip()).name
                     if filename and filename not in skipped_files:
                         skipped_files.append(filename)
         return skipped_files
