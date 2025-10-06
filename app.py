@@ -303,32 +303,61 @@ class PUExpertCenterMinimal:
         st.success(f"✅ Processed {processed} of {total_files} files; total documents loaded: {len(self.documents)} (prev: {existing_docs})")
     
     def search_documents(self, query, n_results=5):
-        """Search for relevant document segments using keyword matching and scoring"""
+        """Search for relevant segments using token overlap + fuzzy matching (robust)."""
         if not self.processed:
             return []
-        
-        query_words = set(query.lower().split())
+
+        try:
+            from rapidfuzz import fuzz
+        except Exception:
+            fuzz = None
+
+        # Basic stopwords to improve signal
+        stopwords = {
+            'the','a','an','and','or','of','to','in','for','on','at','by','with','as','is','are','be','was','were','it','this','that','these','those','from','about','into','over','under','between','within','per'
+        }
+        q_lower = query.lower()
+        query_tokens = [t for t in re.split(r"[^a-z0-9]+", q_lower) if t and t not in stopwords]
+        if not query_tokens:
+            query_tokens = [t for t in re.split(r"[^a-z0-9]+", q_lower) if t]
+
         results = []
-        
         for doc in self.documents:
-            doc_words = set(doc['words'])
-            
-            # Calculate relevance score
-            common_words = query_words.intersection(doc_words)
-            if len(common_words) > 0:
-                # Score based on word overlap and frequency
-                word_freq = Counter(doc['words'])
-                score = sum(word_freq[word] for word in common_words) / len(doc['words'])
-                
+            text = doc['text']
+            words = doc['words']
+            filename = doc.get('filename','')
+
+            # Token overlap score
+            word_freq = Counter(words)
+            overlap = sum(word_freq.get(tok, 0) for tok in query_tokens) / max(1, len(words))
+
+            # Fuzzy score (partial ratio) on text
+            fuzzy_score = 0.0
+            if fuzz is not None:
+                try:
+                    fuzzy_score = fuzz.partial_ratio(q_lower, text.lower()) / 100.0
+                except Exception:
+                    fuzzy_score = 0.0
+
+            # Filename boost if query mentions terms present in filename
+            filename_boost = 0.0
+            fname_lower = filename.lower()
+            if any(tok in fname_lower for tok in query_tokens):
+                filename_boost = 0.1
+
+            # Combined score
+            score = 0.6 * overlap + 0.4 * fuzzy_score + filename_boost
+
+            if score > 0.01:
+                matched_words = [tok for tok in set(query_tokens) if tok in words or tok in fname_lower]
                 results.append({
-                    'text': doc['text'],
-                    'filename': doc['filename'],
+                    'text': text,
+                    'filename': filename,
                     'file_path': doc['file_path'],
                     'similarity': score,
-                    'matched_words': list(common_words)
+                    'matched_words': matched_words
                 })
-        
-        # Sort by relevance score and return top results
+
         results.sort(key=lambda x: x['similarity'], reverse=True)
         return results[:n_results]
     
