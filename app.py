@@ -825,11 +825,18 @@ def main():
             documents_dir = "./Document Database"  # keep UI functional
         st.caption(f"Folder: {documents_dir}")
 
-        # Check for new files first
+        # Precompute file sets and exclusions
         new_files_count = st.session_state.rag_system.check_for_new_files(documents_dir)
+        all_files_list = st.session_state.rag_system._get_document_files(documents_dir)
+        failed_names = set(st.session_state.rag_system._get_failed_files())
+        skipped_names = set(st.session_state.rag_system._get_skipped_files())
+        def _is_valid(path_str: str) -> bool:
+            name = Path(path_str).name
+            return name not in failed_names and name not in skipped_names
+        valid_files_list = [p for p in all_files_list if _is_valid(p)]
         
         if st.session_state.rag_system.processed:
-            total_available = len(st.session_state.rag_system._get_document_files(documents_dir))
+            total_available = len(valid_files_list)
             processed_files = len({d.get('file_path') for d in st.session_state.rag_system.documents if d.get('file_path')})
             actual_new_files = max(0, total_available - processed_files)
         else:
@@ -866,8 +873,8 @@ def main():
         
         # Statistics section
         st.markdown("### 📊 Quick Stats")
-        doc_files = st.session_state.rag_system._get_document_files(documents_dir)
-        total_available = len(doc_files)
+        doc_files = valid_files_list
+        total_available = len(valid_files_list)
         
         if total_available > 0:
             from collections import Counter
