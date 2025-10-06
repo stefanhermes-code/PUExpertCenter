@@ -1082,61 +1082,65 @@ def main():
                         kb_answer = st.session_state.rag_system.generate_answer(q, search_results)
                     st.session_state.rag_system.assistant_id = original_assistant_id
 
-                    # Step 2: Assistant refinement
-                    if not original_assistant_id:
-                        answer = kb_answer or "Assistant ID not configured and no KB answer available."
-                        sources = []
+                    # If no KB context found, fall back to Assistant-only answer
+                    if not search_results and original_assistant_id:
+                        answer, sources = st.session_state.rag_system.answer_question(q)
                     else:
-                        try:
-                            # Build refinement prompt
-                            context_text = "\n\n".join([r['text'] for r in (search_results or [])][:5])
-                            refine_prompt = (
-                                "You are a polyurethane expert. Refine the following draft answer. "
-                                "If the draft lacks substance, improve it using your tools and knowledge. "
-                                "Preserve a professional, structured format.\n\n"
-                                f"Question: {q}\n\n"
-                                f"Context (from local KB):\n{context_text}\n\n"
-                                f"Draft answer:\n{kb_answer}"
-                            )
-                            client = st.session_state.rag_system.openai_client
-                            thread = client.beta.threads.create()
-                            client.beta.threads.messages.create(
-                                thread_id=thread.id,
-                                role="user",
-                                content=refine_prompt
-                            )
-                            run = client.beta.threads.runs.create(
-                                thread_id=thread.id,
-                                assistant_id=original_assistant_id
-                            )
-                            start = time.time()
-                            while True:
-                                r = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                                if r.status in ["completed", "failed", "cancelled", "expired"]:
-                                    break
-                                time.sleep(0.4)
-                                if time.time() - start > 120:
-                                    break
-                            if r.status == "completed":
-                                msgs = client.beta.threads.messages.list(thread_id=thread.id)
-                                parts = []
-                                for m in msgs.data:
-                                    if m.role == 'assistant':
-                                        for c in m.content:
-                                            if getattr(c, 'type', '') == 'text':
-                                                parts.append(c.text.value)
+                        # Step 2: Assistant refinement
+                        if not original_assistant_id:
+                            answer = kb_answer or "Assistant ID not configured and no KB answer available."
+                            sources = []
+                        else:
+                            try:
+                                # Build refinement prompt
+                                context_text = "\n\n".join([r['text'] for r in (search_results or [])][:5])
+                                refine_prompt = (
+                                    "You are a polyurethane expert. Refine the following draft answer. "
+                                    "If the draft lacks substance, improve it using your tools and knowledge. "
+                                    "Preserve a professional, structured format.\n\n"
+                                    f"Question: {q}\n\n"
+                                    f"Context (from local KB):\n{context_text}\n\n"
+                                    f"Draft answer:\n{kb_answer}"
+                                )
+                                client = st.session_state.rag_system.openai_client
+                                thread = client.beta.threads.create()
+                                client.beta.threads.messages.create(
+                                    thread_id=thread.id,
+                                    role="user",
+                                    content=refine_prompt
+                                )
+                                run = client.beta.threads.runs.create(
+                                    thread_id=thread.id,
+                                    assistant_id=original_assistant_id
+                                )
+                                start = time.time()
+                                while True:
+                                    r = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+                                    if r.status in ["completed", "failed", "cancelled", "expired"]:
                                         break
-                                answer = "\n\n".join(parts) if parts else (kb_answer or "")
-                            else:
-                                answer = kb_answer or f"Assistant run status: {r.status}"
-                            # Collect sources (basic)
-                            sources = []
-                            if search_results:
-                                for result in search_results[:5]:
-                                    sources.append({'filename': result['filename'], 'similarity_score': result['similarity']})
-                        except Exception as e:
-                            answer = kb_answer or f"Hybrid refinement error: {e}"
-                            sources = []
+                                    time.sleep(0.4)
+                                    if time.time() - start > 120:
+                                        break
+                                if r.status == "completed":
+                                    msgs = client.beta.threads.messages.list(thread_id=thread.id)
+                                    parts = []
+                                    for m in msgs.data:
+                                        if m.role == 'assistant':
+                                            for c in m.content:
+                                                if getattr(c, 'type', '') == 'text':
+                                                    parts.append(c.text.value)
+                                            break
+                                    answer = "\n\n".join(parts) if parts else (kb_answer or "")
+                                else:
+                                    answer = kb_answer or f"Assistant run status: {r.status}"
+                                # Collect sources (basic)
+                                sources = []
+                                if search_results:
+                                    for result in search_results[:5]:
+                                        sources.append({'filename': result['filename'], 'similarity_score': result['similarity']})
+                            except Exception as e:
+                                answer = kb_answer or f"Hybrid refinement error: {e}"
+                                sources = []
 
             st.markdown("### 📋 Answer")
             st.caption(f"Answer source: {mode}")
