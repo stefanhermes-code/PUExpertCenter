@@ -676,11 +676,21 @@ class PUExpertCenterMinimal:
         if self.log_file.exists():
             with open(self.log_file, "r", encoding="utf-8") as f:
                 content = f.read()
-                # Extract skipped file paths from log
+                # Extract skipped file paths from log - look for various patterns
                 import re
-                # Look for "Skipping unchanged file:" and "No text extracted from:" patterns
-                skipped_matches = re.findall(r"(?:Skipping unchanged file:|No text extracted from:)\s*(.+?)(?:\n|$)", content)
-                skipped_files = [match.strip() for match in skipped_matches]
+                patterns = [
+                    r"Skipping unchanged file:\s*(.+?)(?:\n|$)",
+                    r"No text extracted from:\s*(.+?)(?:\n|$)",
+                    r"Skipped \(duplicates/unchanged\):\s*(.+?)(?:\n|$)",
+                    r"Skipped.*?:\s*(.+?)(?:\n|$)"
+                ]
+                for pattern in patterns:
+                    matches = re.findall(pattern, content, re.IGNORECASE)
+                    for match in matches:
+                        # Extract just the filename from full path
+                        filename = Path(match.strip()).name
+                        if filename and filename not in skipped_files:
+                            skipped_files.append(filename)
         return skipped_files
     
     def _acquire_lock(self, user_name):
@@ -902,13 +912,32 @@ def main():
             lines = st.session_state.rag_system._get_recent_log_lines(80)
             if lines:
                 st.code("".join(lines))
-                st.download_button("Download Logs", data="".join(lines), file_name="processing_log.txt")
+                st.download_button("Download Recent Logs", data="".join(lines), file_name="recent_logs.txt")
             else:
                 st.caption("No logs yet.")
+        
+        # Full log download
+        if st.session_state.rag_system.log_file.exists():
+            with open(st.session_state.rag_system.log_file, "r", encoding="utf-8") as f:
+                full_log_content = f.read()
+            st.download_button(
+                "📥 Download Full Processing Log", 
+                data=full_log_content, 
+                file_name="full_processing_log.txt",
+                mime="text/plain",
+                help="Download complete processing log to analyze skipped files"
+            )
         
         # Failed and skipped files section
         failed_files = st.session_state.rag_system._get_failed_files()
         skipped_files = st.session_state.rag_system._get_skipped_files()
+        
+        # Debug: Show what we found
+        with st.expander("🔍 Debug Info", expanded=False):
+            st.write(f"Failed files found: {len(failed_files)}")
+            st.write(f"Skipped files found: {len(skipped_files)}")
+            if skipped_files:
+                st.write("Skipped files:", skipped_files)
         
         if failed_files or skipped_files:
             with st.expander("⚠️ Excluded Files", expanded=False):

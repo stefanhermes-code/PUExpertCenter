@@ -280,6 +280,57 @@ class PUExpertCenterMinimal:
         """Save log entries to file"""
         with open(self.log_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(self.log_entries))
+    
+    def _write_failed_files_log(self, failed_files):
+        """Write failed files to a separate, easily readable log"""
+        failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+        with open(failed_log_path, "w", encoding="utf-8") as f:
+            f.write(f"FAILED FILES LOG - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"{'='*50}\n\n")
+            if failed_files:
+                for file_path, reason in failed_files.items():
+                    f.write(f"❌ FAILED: {Path(file_path).name}\n")
+                    f.write(f"   Path: {file_path}\n")
+                    f.write(f"   Reason: {reason}\n")
+                    f.write(f"   {'-'*40}\n")
+            else:
+                f.write("✅ No files failed to process.\n")
+    
+    def _get_failed_files(self):
+        """Get list of failed files from the failed files log"""
+        failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+        failed_files = []
+        if failed_log_path.exists():
+            with open(failed_log_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                # Extract failed file paths
+                import re
+                failed_matches = re.findall(r"❌ FAILED: (.+?)\n", content)
+                failed_files = [match.strip() for match in failed_matches]
+        return failed_files
+    
+    def _get_skipped_files(self):
+        """Get list of skipped files from the processing log"""
+        skipped_files = []
+        if self.log_file.exists():
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                # Extract skipped file paths from log - look for various patterns
+                import re
+                patterns = [
+                    r"Skipping unchanged file:\s*(.+?)(?:\n|$)",
+                    r"No text extracted from:\s*(.+?)(?:\n|$)",
+                    r"Skipped \(duplicates/unchanged\):\s*(.+?)(?:\n|$)",
+                    r"Skipped.*?:\s*(.+?)(?:\n|$)"
+                ]
+                for pattern in patterns:
+                    matches = re.findall(pattern, content, re.IGNORECASE)
+                    for match in matches:
+                        # Extract just the filename from full path
+                        filename = Path(match.strip()).name
+                        if filename and filename not in skipped_files:
+                            skipped_files.append(filename)
+        return skipped_files
 
     def _load_cache_and_chunks(self):
         """Load cached documents and chunks"""
@@ -438,12 +489,22 @@ Answer:"""
             return f"Error generating answer: {e}"
 
     def check_for_new_files(self, documents_folder):
-        """Check if there are new files to process"""
-        doc_files = self._get_document_files(documents_folder)
-        return len(doc_files)
+        """Check if there are new files to process (excludes failed and skipped files)"""
+        all_files = self._get_document_files(documents_folder)
+        failed_files = self._get_failed_files()
+        skipped_files = self._get_skipped_files()
+        
+        # Filter out failed and skipped files from the count
+        valid_files = []
+        for file_path in all_files:
+            file_name = Path(file_path).name
+            if file_name not in failed_files and file_name not in skipped_files:
+                valid_files.append(file_path)
+        
+        return len(valid_files)
 
-    def _get_skipped_files(self):
-        """Get list of skipped files from log"""
+    def _get_skipped_files_old(self):
+        """Get list of skipped files from log (old method)"""
         skipped = []
         if self.log_file.exists():
             with open(self.log_file, 'r', encoding='utf-8') as f:
@@ -607,6 +668,36 @@ def main():
         
         with st.spinner("Loading PU knowledge base..."):
             st.session_state.rag_system.process_documents(documents_dir)
+    
+    # Show excluded files info (failed/skipped)
+    failed_files = st.session_state.rag_system._get_failed_files()
+    skipped_files = st.session_state.rag_system._get_skipped_files()
+    
+    if failed_files or skipped_files:
+        with st.expander("⚠️ Excluded Files", expanded=False):
+            if failed_files:
+                st.warning(f"❌ {len(failed_files)} files failed to process")
+                for failed_file in failed_files:
+                    st.text(f"• {failed_file}")
+            
+            if skipped_files:
+                st.info(f"⏭️ {len(skipped_files)} files skipped (duplicates/unchanged)")
+                for skipped_file in skipped_files:
+                    st.text(f"• {skipped_file}")
+            
+            # Download failed files log
+            failed_log_path = Path(__file__).parent / "failed_files_log.txt"
+            if failed_log_path.exists():
+                with open(failed_log_path, "r", encoding="utf-8") as f:
+                    failed_log_content = f.read()
+                st.download_button(
+                    "Download Failed Files Log", 
+                    data=failed_log_content, 
+                    file_name="failed_files_log.txt",
+                    mime="text/plain"
+                )
+    else:
+        st.success("✅ No excluded files")
     
     # Main interface
     col1, col2 = st.columns([2, 1])
