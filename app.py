@@ -580,18 +580,19 @@ class PUExpertCenterMinimal:
         return doc_files
     
     def check_for_new_files(self, doc_dir: str) -> int:
-        """Check for new or updated files without processing them (excludes failed files)"""
+        """Check for new or updated files without processing them (excludes failed and skipped files)"""
         if not os.path.exists(doc_dir):
             return 0
         
         all_files = self._get_document_files(doc_dir)
         failed_files = self._get_failed_files()
+        skipped_files = self._get_skipped_files()
         
-        # Filter out failed files from the count
+        # Filter out failed and skipped files from the count
         valid_files = []
         for file_path in all_files:
             file_name = Path(file_path).name
-            if file_name not in failed_files:
+            if file_name not in failed_files and file_name not in skipped_files:
                 valid_files.append(file_path)
         
         return len(valid_files)
@@ -668,6 +669,19 @@ class PUExpertCenterMinimal:
                 failed_matches = re.findall(r"❌ FAILED: (.+?)\n", content)
                 failed_files = [match.strip() for match in failed_matches]
         return failed_files
+    
+    def _get_skipped_files(self):
+        """Get list of skipped files from the processing log"""
+        skipped_files = []
+        if self.log_file.exists():
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                # Extract skipped file paths from log
+                import re
+                # Look for "Skipping unchanged file:" and "No text extracted from:" patterns
+                skipped_matches = re.findall(r"(?:Skipping unchanged file:|No text extracted from:)\s*(.+?)(?:\n|$)", content)
+                skipped_files = [match.strip() for match in skipped_matches]
+        return skipped_files
     
     def _acquire_lock(self, user_name):
         """Acquire application lock to prevent conflicts"""
@@ -892,13 +906,21 @@ def main():
             else:
                 st.caption("No logs yet.")
         
-        # Failed files section
+        # Failed and skipped files section
         failed_files = st.session_state.rag_system._get_failed_files()
-        if failed_files:
-            with st.expander("❌ Failed Files", expanded=False):
-                st.warning(f"{len(failed_files)} files failed to process")
-                for failed_file in failed_files:
-                    st.text(f"• {failed_file}")
+        skipped_files = st.session_state.rag_system._get_skipped_files()
+        
+        if failed_files or skipped_files:
+            with st.expander("⚠️ Excluded Files", expanded=False):
+                if failed_files:
+                    st.warning(f"❌ {len(failed_files)} files failed to process")
+                    for failed_file in failed_files:
+                        st.text(f"• {failed_file}")
+                
+                if skipped_files:
+                    st.info(f"⏭️ {len(skipped_files)} files skipped (duplicates/unchanged)")
+                    for skipped_file in skipped_files:
+                        st.text(f"• {skipped_file}")
                 
                 # Download failed files log
                 failed_log_path = Path(__file__).parent / "failed_files_log.txt"
@@ -912,7 +934,7 @@ def main():
                         mime="text/plain"
                     )
         else:
-            st.success("✅ No failed files")
+            st.success("✅ No excluded files")
 
     # Main interface
     col1, col2 = st.columns([3, 1])
