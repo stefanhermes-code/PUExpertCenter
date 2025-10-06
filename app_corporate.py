@@ -395,77 +395,76 @@ class PUExpertCenterMinimal:
         return results[:top_k]
 
     def answer_question(self, question):
-        """Main method to answer a question using Assistant if configured, else local retrieval"""
-        # Prefer Assistant (Vector Store + WebSearch) when configured
-        if self.assistant_id:
-            try:
-                thread = self.openai_client.beta.threads.create()
-                self.openai_client.beta.threads.messages.create(
-                    thread_id=thread.id,
-                    role="user",
-                    content=question
-                )
-                run = self.openai_client.beta.threads.runs.create(
-                    thread_id=thread.id,
-                    assistant_id=self.assistant_id
-                )
-                # Poll until completion
-                start = time.time()
-                while True:
-                    r = self.openai_client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                    if r.status in ["completed", "failed", "cancelled", "expired"]:
-                        break
-                    time.sleep(0.4)
-                    # optional safety timeout
-                    if time.time() - start > 120:
-                        return "Assistant timeout. Please try again.", []
-                if r.status != "completed":
-                    return f"Assistant run status: {r.status}", []
-                msgs = self.openai_client.beta.threads.messages.list(thread_id=thread.id)
-                answer_text = ""
-                sources = []
+        """Corporate: Always use Hybrid mode (KB → Assistant refine)."""
+        # Step 1: Local KB retrieval
+        search_results = self.search_documents(question)
+        kb_answer = ""
+        if search_results:
+            kb_answer = self.generate_answer(question, search_results)
+        
+        # Step 2: Assistant refinement if configured; else return KB answer
+        if not self.assistant_id:
+            if kb_answer:
+                sources = [
+                    {
+                        'filename': r['filename'],
+                        'similarity_score': r['similarity'],
+                        'matched_words': r['matched_words']
+                    } for r in (search_results or [])
+                ]
+                return kb_answer, sources
+            return "No relevant information found in the knowledge base.", []
+
+        try:
+            # Build refinement prompt with limited context
+            context_text = "\n\n".join([r['text'] for r in (search_results or [])][:5])
+            refine_prompt = (
+                "You are a polyurethane expert. Refine the following draft answer. "
+                "If the draft lacks substance, improve it using your tools and knowledge. "
+                "Preserve a professional, structured format.\n\n"
+                f"Question: {question}\n\n"
+                f"Context (from local KB):\n{context_text}\n\n"
+                f"Draft answer:\n{kb_answer}"
+            )
+            client = self.openai_client
+            thread = client.beta.threads.create()
+            client.beta.threads.messages.create(
+                thread_id=thread.id,
+                role="user",
+                content=refine_prompt
+            )
+            run = client.beta.threads.runs.create(
+                thread_id=thread.id,
+                assistant_id=self.assistant_id
+            )
+            start = time.time()
+            while True:
+                r = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+                if r.status in ["completed", "failed", "cancelled", "expired"]:
+                    break
+                time.sleep(0.4)
+                if time.time() - start > 120:
+                    break
+            if r.status == "completed":
+                msgs = client.beta.threads.messages.list(thread_id=thread.id)
+                parts = []
                 for m in msgs.data:
                     if m.role == 'assistant':
-                        parts = []
                         for c in m.content:
                             if getattr(c, 'type', '') == 'text':
                                 parts.append(c.text.value)
-                        if parts:
-                            answer_text = "\n\n".join(parts)
-                        # If the assistant returns file references as attachments
-                        if hasattr(m, 'attachments') and m.attachments:
-                            for att in m.attachments:
-                                fname = getattr(att, 'filename', None)
-                                if fname:
-                                    sources.append({'filename': fname, 'similarity_score': 1.0})
                         break
-                
-                # Extract source references from the answer text if no attachments found
-                if not sources and answer_text:
-                    import re
-                    # Look for file references in the text (common patterns)
-                    file_refs = re.findall(r'\[([^\]]+\.(?:pdf|docx?|txt|pptx?|xlsx?|html?|md|csv))\]', answer_text, re.IGNORECASE)
-                    for ref in file_refs:
-                        sources.append({'filename': ref, 'similarity_score': 1.0})
-                    
-                    # Also look for quoted filenames
-                    quoted_files = re.findall(r'"([^"]+\.(?:pdf|docx?|txt|pptx?|xlsx?|html?|md|csv))"', answer_text, re.IGNORECASE)
-                    for ref in quoted_files:
-                        sources.append({'filename': ref, 'similarity_score': 1.0})
-                
-                return (answer_text or ""), sources
-            except Exception as e:
-                return f"Assistant error: {e}", []
-        
-        # Fallback to local retrieval
-        search_results = self.search_documents(question)
-        if not search_results:
-            return "No relevant information found in the knowledge base.", []
-        answer = self.generate_answer(question, search_results)
-        sources = []
-        for result in search_results:
-            sources.append({'filename': result['filename'], 'similarity_score': result['similarity'], 'matched_words': result['matched_words']})
-        return answer, sources
+                answer = "\n\n".join(parts) if parts else (kb_answer or "")
+            else:
+                answer = kb_answer or f"Assistant run status: {r.status}"
+            # Sources from KB step for transparency
+            sources = []
+            if search_results:
+                for result in search_results[:5]:
+                    sources.append({'filename': result['filename'], 'similarity_score': result['similarity']})
+            return answer, sources
+        except Exception as e:
+            return kb_answer or f"Hybrid refinement error: {e}", []
 
     def generate_answer(self, question, search_results):
         """Generate an answer based on search results"""
