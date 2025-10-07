@@ -13,6 +13,8 @@ import time
 from datetime import datetime
 from PIL import Image
 from typing import Dict
+import rapidfuzz
+from rapidfuzz import fuzz, process
 
 # Load environment variables
 load_dotenv()
@@ -122,11 +124,37 @@ class PUExpertCenterMinimal:
                 # If all methods failed, return a message indicating the issue
                 return f"[PDF file: {file_path.name} - All extraction methods failed. File may be image-based or corrupted.]"
             elif file_path.suffix.lower() in ['.docx', '.doc']:
-                doc = Document(file_path)
-                text = ""
-                for paragraph in doc.paragraphs:
-                    text += paragraph.text + "\n"
-                return text
+                # Enhanced DOCX extraction with table support
+                try:
+                    doc = Document(file_path)
+                    text = ""
+                    
+                    # Extract paragraphs
+                    for paragraph in doc.paragraphs:
+                        text += paragraph.text + "\n"
+                    
+                    # Extract table content
+                    for table in doc.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                text += cell.text + " "
+                            text += "\n"
+                    
+                    if text.strip():
+                        return text
+                    
+                    # Fallback to docx2txt if no content extracted
+                    try:
+                        import docx2txt
+                        return docx2txt.process(file_path)
+                    except ImportError:
+                        pass
+                    
+                    return f"[DOCX file: {file_path.name} - No text content extracted]"
+                    
+                except Exception as e:
+                    print(f"DOCX extraction failed for {file_path.name}: {e}")
+                    return f"[DOCX file: {file_path.name} - Extraction failed: {str(e)}]"
             elif file_path.suffix.lower() == '.txt':
                 with open(file_path, 'r', encoding='utf-8') as file:
                     return file.read()
@@ -349,6 +377,26 @@ class PUExpertCenterMinimal:
                     if filename and filename not in skipped_files:
                         skipped_files.append(filename)
         return skipped_files
+    
+    def get_vector_store_sync_files(self, documents_dir):
+        """Get list of files that need to be synced to vector store"""
+        if not self.processed:
+            return []
+        
+        # Get all files in documents directory
+        all_files = self._get_document_files(documents_dir)
+        
+        # Get processed files from KB
+        processed_files = {d.get('filename') for d in self.documents if d.get('filename')}
+        
+        # Find new files that need vector store sync
+        new_files = []
+        for file_path in all_files:
+            filename = Path(file_path).name
+            if filename not in processed_files:
+                new_files.append(file_path)
+        
+        return new_files
 
     def _load_cache_and_chunks(self):
         """Load cached documents and chunks"""
@@ -362,30 +410,55 @@ class PUExpertCenterMinimal:
             self._log(f"Error loading cache: {e}")
 
     def search_documents(self, query, top_k=5):
-        """Search through processed documents"""
+        """Enhanced search through processed documents using fuzzy matching"""
         if not self.documents:
             return []
         
-        query_lower = query.lower()
+        # Common stopwords to filter out
+        stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
+        
+        # Filter query words (remove stopwords)
+        query_words = [word.lower() for word in query.split() if word.lower() not in stopwords]
+        if not query_words:
+            query_words = [word.lower() for word in query.split()]
+        
         results = []
         
         for doc in self.documents:
-            text_lower = doc['text'].lower()
+            text = doc['text']
+            filename = doc['filename']
             
-            # Simple keyword matching
-            matches = 0
+            # Calculate fuzzy match scores
+            text_lower = text.lower()
+            filename_lower = filename.lower()
+            
+            # Score for content matching
+            content_score = 0
             matched_words = []
-            for word in query_lower.split():
-                if word in text_lower:
-                    matches += 1
-                    matched_words.append(word)
             
-            if matches > 0:
-                # Calculate similarity score
-                similarity = matches / len(query.split())
+            for word in query_words:
+                # Fuzzy match in content
+                matches = process.extract(word, text_lower.split(), limit=3, scorer=fuzz.ratio)
+                if matches:
+                    best_match = max(matches, key=lambda x: x[1])
+                    if best_match[1] > 60:  # Threshold for fuzzy matching
+                        content_score += best_match[1] / 100
+                        matched_words.append(word)
+            
+            # Boost score for filename matches
+            filename_score = 0
+            for word in query_words:
+                if word in filename_lower:
+                    filename_score += 2.0  # Strong boost for filename matches
+                    if word not in matched_words:
+                        matched_words.append(word)
+            
+            # Calculate final similarity score
+            if matched_words:
+                similarity = (content_score + filename_score) / len(query_words)
                 results.append({
-                    'filename': doc['filename'],
-                    'text': doc['text'],
+                    'filename': filename,
+                    'text': text,
                     'similarity': similarity,
                     'matched_words': matched_words
                 })
@@ -715,6 +788,47 @@ def main():
                 )
     else:
         st.success("✅ No excluded files")
+    
+    # Vector Store Management
+    with st.expander("🔗 Vector Store Management", expanded=False):
+        st.markdown("**Sync Status:**")
+        
+        # Get all processed files from KB
+        kb_files = set()
+        for doc in st.session_state.rag_system.documents:
+            if 'filename' in doc:
+                kb_files.add(doc['filename'])
+        
+        st.info("📋 **Current KB Files:** " + str(len(kb_files)) + " files processed")
+        
+        if kb_files:
+            st.markdown("**Files in Knowledge Base:**")
+            for i, filename in enumerate(sorted(kb_files)[:10]):  # Show first 10
+                st.text(f"• {filename}")
+            if len(kb_files) > 10:
+                st.text(f"... and {len(kb_files) - 10} more files")
+        
+        st.markdown("---")
+        st.markdown("**⚠️ Vector Store Sync Required**")
+        st.warning("After adding new files to the KB, update the Assistant's Vector Store with these files:")
+        
+        # Show new files that need vector store sync
+        documents_dir = resolve_documents_dir() or "./Document Database"
+        new_files = st.session_state.rag_system.get_vector_store_sync_files(documents_dir)
+        
+        if new_files:
+            st.error(f"🆕 {len(new_files)} new files need Vector Store upload:")
+            for filename in new_files[:5]:  # Show first 5
+                st.text(f"• {Path(filename).name}")
+            if len(new_files) > 5:
+                st.text(f"... and {len(new_files) - 5} more files")
+            
+            st.markdown("**Action Required:**")
+            st.markdown("1. Go to OpenAI Assistant settings")
+            st.markdown("2. Upload these files to Vector Store")
+            st.markdown("3. Click 'Rebuild Index' to process locally")
+        else:
+            st.success("✅ All files are synced between KB and Vector Store")
     
     # Main interface
     col1, col2 = st.columns([2, 1])
