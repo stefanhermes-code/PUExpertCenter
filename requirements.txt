@@ -11,4 +11,4 @@ pillow>=10.0.0
 pymupdf>=1.23.0
 pandas
 requests
-rapidfuzz>=3.6.1
+rapidfuzz

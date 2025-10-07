@@ -12,28 +12,11 @@ import json
 import time
 from datetime import datetime
 from PIL import Image
+from typing import List, Dict, Any, Optional
 
 # Load environment variables
 load_dotenv()
 
-# External Vector Store Imports (optional)
-try:
-    import pinecone
-    PINECONE_AVAILABLE = True
-except ImportError:
-    PINECONE_AVAILABLE = False
-
-try:
-    import chromadb
-    CHROMADB_AVAILABLE = True
-except ImportError:
-    CHROMADB_AVAILABLE = False
-
-try:
-    import weaviate
-    WEAVIATE_AVAILABLE = True
-except ImportError:
-    WEAVIATE_AVAILABLE = False
 
 # Flexible resolver for documents directory (accepts multiple name variants)
 from typing import Optional
@@ -838,168 +821,6 @@ class PUExpertCenterMinimal:
             return None
 
 
-# External Vector Store Classes
-class PineconeVectorStore:
-    """Pinecone vector store integration"""
-    
-    def __init__(self, api_key: str, environment: str, index_name: str):
-        if not PINECONE_AVAILABLE:
-            raise ImportError("Pinecone not installed. Run: pip install pinecone-client")
-        
-        pinecone.init(api_key=api_key, environment=environment)
-        self.index = pinecone.Index(index_name)
-        self.index_name = index_name
-    
-    def upsert_documents(self, documents: List[Dict], batch_size: int = 100):
-        """Upload documents to Pinecone"""
-        vectors = []
-        for i, doc in enumerate(documents):
-            # Create embedding (you'd use OpenAI embeddings here)
-            vector_id = f"doc_{i}_{hashlib.md5(doc['content'].encode()).hexdigest()[:8]}"
-            vectors.append({
-                'id': vector_id,
-                'values': doc.get('embedding', []),  # You'd generate this with OpenAI
-                'metadata': {
-                    'filename': doc.get('filename', ''),
-                    'content': doc['content'][:1000],  # First 1000 chars
-                    'timestamp': datetime.now().isoformat()
-                }
-            })
-        
-        # Batch upsert
-        for i in range(0, len(vectors), batch_size):
-            batch = vectors[i:i + batch_size]
-            self.index.upsert(vectors=batch)
-    
-    def search(self, query: str, top_k: int = 5) -> List[Dict]:
-        """Search Pinecone for similar documents"""
-        # Generate query embedding (you'd use OpenAI here)
-        query_embedding = []  # Replace with actual embedding
-        
-        results = self.index.query(
-            vector=query_embedding,
-            top_k=top_k,
-            include_metadata=True
-        )
-        
-        return [{
-            'content': match['metadata']['content'],
-            'filename': match['metadata']['filename'],
-            'score': match['score']
-        } for match in results['matches']]
-
-
-class ChromaVectorStore:
-    """ChromaDB vector store integration"""
-    
-    def __init__(self, collection_name: str = "pu_expert_center"):
-        if not CHROMADB_AVAILABLE:
-            raise ImportError("ChromaDB not installed. Run: pip install chromadb")
-        
-        self.client = chromadb.Client()
-        self.collection = self.client.create_collection(
-            name=collection_name,
-            metadata={"description": "PU ExpertCenter Knowledge Base"}
-        )
-    
-    def upsert_documents(self, documents: List[Dict]):
-        """Upload documents to ChromaDB"""
-        ids = []
-        contents = []
-        metadatas = []
-        
-        for i, doc in enumerate(documents):
-            doc_id = f"doc_{i}_{hashlib.md5(doc['content'].encode()).hexdigest()[:8]}"
-            ids.append(doc_id)
-            contents.append(doc['content'])
-            metadatas.append({
-                'filename': doc.get('filename', ''),
-                'timestamp': datetime.now().isoformat()
-            })
-        
-        self.collection.add(
-            ids=ids,
-            documents=contents,
-            metadatas=metadatas
-        )
-    
-    def search(self, query: str, n_results: int = 5) -> List[Dict]:
-        """Search ChromaDB for similar documents"""
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=n_results
-        )
-        
-        return [{
-            'content': doc,
-            'filename': metadata['filename'],
-            'score': distance  # ChromaDB returns distance, not similarity
-        } for doc, metadata, distance in zip(
-            results['documents'][0],
-            results['metadatas'][0],
-            results['distances'][0]
-        )]
-
-
-class WeaviateVectorStore:
-    """Weaviate vector store integration"""
-    
-    def __init__(self, url: str, api_key: str = None):
-        if not WEAVIATE_AVAILABLE:
-            raise ImportError("Weaviate not installed. Run: pip install weaviate-client")
-        
-        auth_config = weaviate.AuthApiKey(api_key=api_key) if api_key else None
-        self.client = weaviate.Client(url=url, auth_client_secret=auth_config)
-        
-        # Create schema if it doesn't exist
-        self._create_schema()
-    
-    def _create_schema(self):
-        """Create Weaviate schema for PU documents"""
-        schema = {
-            "classes": [{
-                "class": "PUDocument",
-                "description": "PU ExpertCenter Knowledge Base Document",
-                "properties": [
-                    {"name": "filename", "dataType": ["string"]},
-                    {"name": "content", "dataType": ["text"]},
-                    {"name": "timestamp", "dataType": ["date"]}
-                ]
-            }]
-        }
-        
-        try:
-            self.client.schema.create(schema)
-        except:
-            pass  # Schema might already exist
-    
-    def upsert_documents(self, documents: List[Dict]):
-        """Upload documents to Weaviate"""
-        for doc in documents:
-            self.client.data_object.create(
-                data_object={
-                    "filename": doc.get('filename', ''),
-                    "content": doc['content'],
-                    "timestamp": datetime.now().isoformat()
-                },
-                class_name="PUDocument"
-            )
-    
-    def search(self, query: str, limit: int = 5) -> List[Dict]:
-        """Search Weaviate for similar documents"""
-        result = self.client.query.get(
-            "PUDocument", ["filename", "content"]
-        ).with_near_text({
-            "concepts": [query]
-        }).with_limit(limit).do()
-        
-        return [{
-            'content': item['content'],
-            'filename': item['filename'],
-            'score': 1.0  # Weaviate doesn't return scores by default
-        } for item in result['data']['Get']['PUDocument']]
-
-
 def main():
     st.set_page_config(
         page_title="PU ExpertCenter RAG",
@@ -1232,78 +1053,6 @@ def main():
         failed_files = st.session_state.rag_system._get_failed_files()
         skipped_files = st.session_state.rag_system._get_skipped_files()
         
-        # External Vector Store Configuration
-        with st.expander("🌐 External Vector Stores", expanded=False):
-            st.markdown("**Configure External Vector Databases:**")
-            
-            # Vector Store Selection
-            vector_store_type = st.selectbox(
-                "Select Vector Store:",
-                ["None", "Pinecone", "ChromaDB", "Weaviate"],
-                help="Choose external vector database for enhanced search"
-            )
-            
-            if vector_store_type == "Pinecone":
-                st.markdown("**Pinecone Configuration:**")
-                pinecone_api_key = st.text_input("API Key", type="password", key="pinecone_key")
-                pinecone_env = st.text_input("Environment", value="us-west1-gcp", key="pinecone_env")
-                pinecone_index = st.text_input("Index Name", value="pu-expert-center", key="pinecone_index")
-                
-                if st.button("Connect to Pinecone", key="pinecone_connect"):
-                    try:
-                        if pinecone_api_key and pinecone_env and pinecone_index:
-                            st.session_state.pinecone_store = PineconeVectorStore(
-                                api_key=pinecone_api_key,
-                                environment=pinecone_env,
-                                index_name=pinecone_index
-                            )
-                            st.success("✅ Connected to Pinecone!")
-                        else:
-                            st.error("Please fill in all Pinecone fields")
-                    except Exception as e:
-                        st.error(f"Connection failed: {str(e)}")
-            
-            elif vector_store_type == "ChromaDB":
-                st.markdown("**ChromaDB Configuration:**")
-                collection_name = st.text_input("Collection Name", value="pu_expert_center", key="chroma_collection")
-                
-                if st.button("Connect to ChromaDB", key="chroma_connect"):
-                    try:
-                        st.session_state.chroma_store = ChromaVectorStore(collection_name=collection_name)
-                        st.success("✅ Connected to ChromaDB!")
-                    except Exception as e:
-                        st.error(f"Connection failed: {str(e)}")
-            
-            elif vector_store_type == "Weaviate":
-                st.markdown("**Weaviate Configuration:**")
-                weaviate_url = st.text_input("Weaviate URL", value="https://your-cluster.weaviate.network", key="weaviate_url")
-                weaviate_api_key = st.text_input("API Key (optional)", type="password", key="weaviate_key")
-                
-                if st.button("Connect to Weaviate", key="weaviate_connect"):
-                    try:
-                        if weaviate_url:
-                            st.session_state.weaviate_store = WeaviateVectorStore(
-                                url=weaviate_url,
-                                api_key=weaviate_api_key
-                            )
-                            st.success("✅ Connected to Weaviate!")
-                        else:
-                            st.error("Please provide Weaviate URL")
-                    except Exception as e:
-                        st.error(f"Connection failed: {str(e)}")
-            
-            # Show current connections
-            st.markdown("**Active Connections:**")
-            if hasattr(st.session_state, 'pinecone_store'):
-                st.success("🔗 Pinecone: Connected")
-            if hasattr(st.session_state, 'chroma_store'):
-                st.success("🔗 ChromaDB: Connected")
-            if hasattr(st.session_state, 'weaviate_store'):
-                st.success("🔗 Weaviate: Connected")
-            
-            if not any(hasattr(st.session_state, attr) for attr in ['pinecone_store', 'chroma_store', 'weaviate_store']):
-                st.info("No external vector stores connected")
-
         # Vector Store Management
         with st.expander("🔗 Vector Store Management", expanded=False):
             st.markdown("**Sync Status:**")
@@ -1346,42 +1095,6 @@ def main():
             else:
                 st.success("✅ All files are synced between KB and Vector Store")
             
-            # External Vector Store Upload
-            st.markdown("---")
-            st.markdown("**📤 Upload to External Vector Stores:**")
-            
-            if hasattr(st.session_state, 'pinecone_store') or hasattr(st.session_state, 'chroma_store') or hasattr(st.session_state, 'weaviate_store'):
-                if st.button("🔄 Sync All Documents to External Vector Stores", key="sync_external"):
-                    with st.spinner("Uploading documents to external vector stores..."):
-                        try:
-                            # Prepare documents for upload
-                            documents_to_upload = []
-                            for doc in st.session_state.rag_system.documents:
-                                if 'content' in doc and 'filename' in doc:
-                                    documents_to_upload.append({
-                                        'filename': doc['filename'],
-                                        'content': doc['content']
-                                    })
-                            
-                            # Upload to each connected vector store
-                            if hasattr(st.session_state, 'pinecone_store'):
-                                st.session_state.pinecone_store.upsert_documents(documents_to_upload)
-                                st.success("✅ Uploaded to Pinecone")
-                            
-                            if hasattr(st.session_state, 'chroma_store'):
-                                st.session_state.chroma_store.upsert_documents(documents_to_upload)
-                                st.success("✅ Uploaded to ChromaDB")
-                            
-                            if hasattr(st.session_state, 'weaviate_store'):
-                                st.session_state.weaviate_store.upsert_documents(documents_to_upload)
-                                st.success("✅ Uploaded to Weaviate")
-                            
-                            st.success(f"🎉 Successfully synced {len(documents_to_upload)} documents!")
-                            
-                        except Exception as e:
-                            st.error(f"Upload failed: {str(e)}")
-            else:
-                st.info("Connect to an external vector store above to enable document upload")
         
         # Debug: Show what we found
         with st.expander("🔍 Debug Info", expanded=False):
