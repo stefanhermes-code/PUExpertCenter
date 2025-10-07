@@ -1233,12 +1233,15 @@ def main():
                                 # Build refinement prompt
                                 context_text = "\n\n".join([r['text'] for r in (search_results or [])][:5])
                                 refine_prompt = (
-                                    "You are a polyurethane expert. Refine the following draft answer. "
-                                    "If the draft lacks substance, improve it using your tools and knowledge. "
-                                    "Preserve a professional, structured format.\n\n"
-                                    f"Question: {q}\n\n"
-                                    f"Context (from local KB):\n{context_text}\n\n"
-                                    f"Draft answer:\n{kb_answer}"
+                                    "INSTRUCTIONS:\n"
+                                    "- You are a polyurethane expert.\n"
+                                    "- Refine the KB_DRAFT strictly using the information in CONTEXT.\n"
+                                    "- Do not ignore the KB_DRAFT; improve clarity, structure, and correctness.\n"
+                                    "- If CONTEXT lacks specifics, fill small gaps cautiously and avoid speculation.\n"
+                                    "- Do not include inline citations. If helpful, add a short 'References' list at the end.\n\n"
+                                    f"[QUESTION]\n{q}\n[/QUESTION]\n\n"
+                                    f"[CONTEXT]\n{context_text}\n[/CONTEXT]\n\n"
+                                    f"[KB_DRAFT]\n{kb_answer}\n[/KB_DRAFT]"
                                 )
                                 client = st.session_state.rag_system.openai_client
                                 thread = client.beta.threads.create()
