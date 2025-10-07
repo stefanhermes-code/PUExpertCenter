@@ -438,7 +438,6 @@ class PUExpertCenterMinimal:
                     {"role": "system", "content": "You are a polyurethane expert providing detailed, accurate information based on research documents."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=2000,
                 temperature=0.3
             )
             return response.choices[0].message.content
@@ -1285,6 +1284,21 @@ def main():
             st.caption(f"Answer source: {mode}")
             st.markdown(answer)
 
+            # Conservative reference list (bottom only)
+            unique_refs = []
+            if sources:
+                seen = set()
+                for s in sources:
+                    name = s.get('filename') if isinstance(s, dict) else str(s)
+                    if name and name not in seen:
+                        unique_refs.append(name)
+                        seen.add(name)
+                    if len(unique_refs) >= 5:
+                        break
+            if unique_refs:
+                st.markdown("#### References")
+                st.markdown("\n".join(f"- {r}" for r in unique_refs))
+
             # Convert markdown to HTML and provide professional styling
             import re
             import time
@@ -1310,7 +1324,7 @@ def main():
                         source_refs.append(f'<li>{src_name} (Relevance: {score:.3f})</li>')
                     else:
                         source_refs.append(f'<li>{src_name}</li>')
-            source_list = f'<ul>{"".join(source_refs)}</ul>' if source_refs else '<p><em>No specific sources referenced.</em></p>'
+            source_list = f'<ul>{"".join(source_refs)}</ul>' if source_refs else ''
 
             html_content = f"""
 <!doctype html>
@@ -1342,6 +1356,7 @@ def main():
     <div class="header"><h1>🧪 PU ExpertCenter Response</h1><div class="timestamp">Generated on {time.strftime('%B %d, %Y at %I:%M %p')}</div></div>
     <div class="question-section"><h2>❓ Question</h2><p class="question-text">{q}</p></div>
     <div class="content">{html_answer}</div>
+    {('<h3>References</h3>' + source_list) if source_list else ''}
   </div>
 </body>
 </html>
