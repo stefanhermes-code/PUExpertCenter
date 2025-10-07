@@ -121,11 +121,27 @@ class PUExpertCenterMinimal:
                 # If all methods failed, return a message indicating the issue
                 return f"[PDF file: {file_path.name} - All extraction methods failed. File may be image-based or corrupted.]"
             elif file_path.suffix.lower() == '.docx':
+                # Extract paragraphs and table text; then fallback to docx2txt if empty
                 doc = Document(file_path)
                 text = ""
                 for paragraph in doc.paragraphs:
-                    text += paragraph.text + "\n"
-                return text
+                    if paragraph.text:
+                        text += paragraph.text + "\n"
+                # Include table cell text (often missed)
+                for table in getattr(doc, 'tables', []):
+                    for row in table.rows:
+                        row_text = " ".join(cell.text for cell in row.cells if cell.text)
+                        if row_text.strip():
+                            text += row_text + "\n"
+                if text.strip():
+                    return text
+                # Fallback: docx2txt can sometimes recover more content
+                try:
+                    import docx2txt
+                    fallback = docx2txt.process(str(file_path))
+                    return fallback if fallback and fallback.strip() else ""
+                except Exception:
+                    return ""
             elif file_path.suffix.lower() == '.txt':
                 with open(file_path, 'r', encoding='utf-8') as file:
                     return file.read()
@@ -1279,11 +1295,20 @@ def main():
     with col2:
         st.markdown("### 💡 Sample Questions")
         sample_questions = [
+            # General domain
             "What are the main types of polyurethane catalysts?",
-            "How do I troubleshoot foam collapse in flexible PU?",
             "What factors affect the density of rigid PU foam?",
             "What are typical compression set values for automotive foams?",
-            "How does temperature affect gel time in PU systems?"
+            "How does temperature affect gel time in PU systems?",
+            # KB-targeted (should hit specific docs)
+            "According to the Troubleshooting guide - Laader Berg, what causes foam collapse?",
+            "From the Troubleshooting guide - Laader Berg, list common root causes of shrinkage.",
+            "In Dow Polyurethanes Flexible Foams, how does water level impact density and cell structure?",
+            "What key market trends does EUROPUR Market Report FY 2024 highlight?",
+            "From Safety-Guidelines-2023-1, what PPE is required for handling TDI/MDI?",
+            "What are the main findings in 'Handbook-of-plastic-foams' about compression behavior?",
+            "Summarize key ESG metrics mentioned in hennecke_esg_key_mertrics_2024.",
+            "What troubleshooting steps address voids/porosity in slabstock foams per Laader Berg?",
         ]
 
         for q in sample_questions:
