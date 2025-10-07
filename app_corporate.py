@@ -659,10 +659,19 @@ def check_password():
         return False
 
     if not st.session_state.authenticated:
+        st.markdown(
+            """
+            <style>
+            .pu-header-row {display:flex; align-items:center; gap:16px;}
+            .pu-logo img {height:56px; width:auto; display:block;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         col1, col2 = st.columns([1, 4])
         with col1:
             try:
-                st.image("PU ExpertCenter Logo V1.png", width=180)
+                st.markdown('<div class="pu-header-row"><div class="pu-logo"><img src="PU ExpertCenter Logo V1.png"/></div></div>', unsafe_allow_html=True)
             except:
                 st.markdown("🧪")
         with col2:
@@ -715,11 +724,20 @@ def main():
         initial_sidebar_state="collapsed"  # Hide sidebar for corporate version
     )
     
-    # Header with logo
+    # Header with logo (precise alignment)
+    st.markdown(
+        """
+        <style>
+        .pu-header-row {display:flex; align-items:center; gap:16px;}
+        .pu-logo img {height:56px; width:auto; display:block;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     col1, col2 = st.columns([1, 4])
     with col1:
         try:
-            st.image("PU ExpertCenter Logo V1.png", width=180)
+            st.markdown('<div class="pu-header-row"><div class="pu-logo"><img src="PU ExpertCenter Logo V1.png"/></div></div>', unsafe_allow_html=True)
         except:
             st.markdown("🧪")  # Fallback if logo not found
     with col2:
@@ -785,8 +803,6 @@ def main():
                     file_name="failed_files_log.txt",
                     mime="text/plain"
                 )
-    else:
-        st.success("✅ No excluded files")
     
     # Vector Store Management
     with st.expander("🔗 Vector Store Management", expanded=False):
