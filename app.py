@@ -882,23 +882,10 @@ def main():
     """, unsafe_allow_html=True)
     
     # Header with logo
-    # Header layout with precise logo alignment
-    st.markdown(
-        """
-        <style>
-        .pu-header-row {display:flex; align-items:center; gap:16px;}
-        .pu-logo img {height:56px; width:auto; display:block;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
     col1, col2 = st.columns([1, 4])
     with col1:
         try:
-            st.markdown(
-                '<div class="pu-header-row"><div class="pu-logo"><img src="PU ExpertCenter Logo V1.png"/></div></div>',
-                unsafe_allow_html=True,
-            )
+            st.image("PU ExpertCenter Logo V1.png", width=180)
         except:
             st.markdown("🧪")  # Fallback if logo not found
     with col2:
