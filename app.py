@@ -56,6 +56,9 @@ class PUExpertCenterMinimal:
         self.openai_client = openai.OpenAI(api_key=api_key)
         self.documents = []
         self.processed = False
+        # Optional BM25 index (lazy built)
+        self._bm25_index = None
+        self._bm25_corpus = None
         # Assistant (OpenAI Assistants API)
         self.assistant_id = assistant_id
         # Resume/cache/tracking
@@ -313,6 +316,9 @@ class PUExpertCenterMinimal:
         
         self.processed = True
         self._finalize_progress()
+        # Invalidate BM25 after reprocessing
+        self._bm25_index = None
+        self._bm25_corpus = None
         
         # Write processing summary to log
         self._write_log_summary(total_files, processed_count, failed_files, skipped_files, successful_files)
@@ -321,7 +327,7 @@ class PUExpertCenterMinimal:
         st.success(f"✅ Processed {processed} of {total_files} files; total documents loaded: {len(self.documents)} (prev: {existing_docs})")
     
     def search_documents(self, query, n_results=5):
-        """Search for relevant segments using token overlap + fuzzy matching (robust)."""
+        """Hybrid retrieval: BM25 (if available) + token overlap + fuzzy matching."""
         if not self.processed:
             return []
 
@@ -329,6 +335,17 @@ class PUExpertCenterMinimal:
             from rapidfuzz import fuzz
         except Exception:
             fuzz = None
+
+        # Build BM25 index lazily
+        bm25 = None
+        try:
+            from rank_bm25 import BM25Okapi
+            if self._bm25_index is None:
+                self._bm25_corpus = [doc['words'] for doc in self.documents]
+                self._bm25_index = BM25Okapi(self._bm25_corpus)
+            bm25 = self._bm25_index
+        except Exception:
+            bm25 = None
 
         # Basic stopwords to improve signal
         stopwords = {
@@ -340,7 +357,7 @@ class PUExpertCenterMinimal:
             query_tokens = [t for t in re.split(r"[^a-z0-9]+", q_lower) if t]
 
         results = []
-        for doc in self.documents:
+        for idx, doc in enumerate(self.documents):
             text = doc['text']
             words = doc['words']
             filename = doc.get('filename','')
@@ -363,8 +380,19 @@ class PUExpertCenterMinimal:
             if any(tok in fname_lower for tok in query_tokens):
                 filename_boost = 0.1
 
-            # Combined score
-            score = 0.6 * overlap + 0.4 * fuzzy_score + filename_boost
+            # BM25 score
+            bm25_score = 0.0
+            if bm25 is not None and query_tokens:
+                try:
+                    bm25_score = bm25.get_scores(query_tokens)[idx]
+                except Exception:
+                    bm25_score = 0.0
+            # Normalize BM25 into 0..1 range heuristically
+            if bm25_score > 0:
+                bm25_score = min(1.0, bm25_score / (bm25_score + 3.0))
+
+            # Combined score (prioritize BM25)
+            score = 0.6 * bm25_score + 0.25 * overlap + 0.15 * fuzzy_score + filename_boost
 
             if score > 0.01:
                 matched_words = [tok for tok in set(query_tokens) if tok in words or tok in fname_lower]
@@ -1361,20 +1389,17 @@ def main():
     with col2:
         st.markdown("### 💡 Sample Questions")
         sample_questions = [
-            # General domain
-            "What are the main types of polyurethane catalysts?",
-            "What factors affect the density of rigid PU foam?",
-            "What are typical compression set values for automotive foams?",
-            "How does temperature affect gel time in PU systems?",
-            # KB-targeted (should hit specific docs)
-            "According to the Troubleshooting guide - Laader Berg, what causes foam collapse?",
-            "From the Troubleshooting guide - Laader Berg, list common root causes of shrinkage.",
-            "In Dow Polyurethanes Flexible Foams, how does water level impact density and cell structure?",
-            "What key market trends does EUROPUR Market Report FY 2024 highlight?",
-            "From Safety-Guidelines-2023-1, what PPE is required for handling TDI/MDI?",
-            "What are the main findings in 'Handbook-of-plastic-foams' about compression behavior?",
-            "Summarize key ESG metrics mentioned in hennecke_esg_key_mertrics_2024.",
-            "What troubleshooting steps address voids/porosity in slabstock foams per Laader Berg?",
+            # Realistic, document-agnostic PU questions
+            "What is the role of MDI versus TDI in flexible foam recipes?",
+            "Typical density and hardness ranges for slabstock comfort foam?",
+            "Root causes of voids/holes in flexible foam blocks and how to fix them?",
+            "How to reduce scrap during color changeovers on a slab line?",
+            "Recommended amine/crosslinker levels and their effects in comfort foam?",
+            "Best practices for safe storage/handling of isocyanates (MDI/TDI)?",
+            "Causes of 'split' in high‑resilience foam and mitigation actions?",
+            "Index tuning guidelines to improve seating foam durability?",
+            "How to structure a troubleshooting flow for foam collapse after demold?",
+            "Key process metrics to track for foam line OEE improvement?",
         ]
 
         for q in sample_questions:
