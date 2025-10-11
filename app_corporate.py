@@ -729,28 +729,24 @@ def main():
                 del st.session_state.valid_until
             st.rerun()
     
-    # Logo centered
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # Logo centered using st.image with use_column_width
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         try:
             st.image("PU ExpertCenter Logo V1.png", width=280)
         except:
             st.markdown("🧪")  # Fallback if logo not found
     
-    # Title centered
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.markdown("<h1 style='text-align: center; margin-top: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
+    # Title centered using st.title (which centers by default)
+    st.title("Polyurethane ExpertCenter")
     
-    # Tagline with user info
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        user_email = st.session_state.get('current_user', '')
-        valid_until = st.session_state.get('valid_until', '')
-        tagline = f"Corporate Version for user {user_email}"
-        if valid_until:
-            tagline += f" — valid until {valid_until}"
-        st.markdown(f"<p style='text-align: center; color: #666; margin-top: 5px;'>{tagline}</p>", unsafe_allow_html=True)
+    # Tagline with user info - centered
+    user_email = st.session_state.get('current_user', '')
+    valid_until = st.session_state.get('valid_until', '')
+    tagline = f"Corporate Version for user {user_email}"
+    if valid_until:
+        tagline += f" — valid until {valid_until}"
+    st.markdown(f"<div style='text-align: center; color: #666; margin-top: 5px;'>{tagline}</div>", unsafe_allow_html=True)
 
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications.")
     
