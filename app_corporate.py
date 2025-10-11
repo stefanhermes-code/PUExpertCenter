@@ -690,10 +690,12 @@ def check_password():
                                     return False
                             st.session_state.authenticated = True
                             st.session_state.current_user = user['email']
+                            st.session_state.valid_until = valid_until_str  # Store valid_until for display
                             st.rerun()
                         except Exception:
                             st.session_state.authenticated = True
                             st.session_state.current_user = user['email']
+                            st.session_state.valid_until = user.get('valid_until', '')
                             st.rerun()
                     else:
                         st.error("Incorrect password. Please try again.")
@@ -715,31 +717,35 @@ def main():
         initial_sidebar_state="collapsed"  # Hide sidebar for corporate version
     )
     
-    # Header with logo
-    col1, col2 = st.columns([1, 4])
-    with col1:
+    # Header with centered logo
+    # Logo centered
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
         try:
             st.image("PU ExpertCenter Logo V1.png", width=360)
         except:
             st.markdown("🧪")  # Fallback if logo not found
-    with col2:
-        st.title("PU ExpertCenter: Polyurethane ExpertCenter")
-        st.markdown("**Corporate Version**")
     
-    # Top bar: right-aligned logout button with user info
+    # Title centered
+    st.markdown("<h1 style='text-align: center;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
+    
+    # Tagline with user info
+    user_email = st.session_state.get('current_user', '')
+    valid_until = st.session_state.get('valid_until', '')
+    tagline = f"Corporate Version for user {user_email}"
+    if valid_until:
+        tagline += f" — valid until {valid_until}"
+    st.markdown(f"<p style='text-align: center; color: #666;'>{tagline}</p>", unsafe_allow_html=True)
+    
+    # Top bar: right-aligned logout button
     top_left, top_right = st.columns([6, 1])
     with top_right:
-        # User info above logout button
-        if 'current_user' in st.session_state and st.session_state.current_user:
-            current_time = datetime.now().strftime('%d/%m/%Y %H:%M')
-            st.markdown(f"**{st.session_state.current_user}**")
-            st.markdown(f"*Logged in: {current_time}*")
-            st.markdown("---")
-        
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             if 'current_user' in st.session_state:
                 del st.session_state.current_user
+            if 'valid_until' in st.session_state:
+                del st.session_state.valid_until
             st.rerun()
 
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications.")
@@ -785,47 +791,6 @@ def main():
                     file_name="failed_files_log.txt",
                     mime="text/plain"
                 )
-    
-    # Vector Store Management
-    with st.expander("🔗 Vector Store Management", expanded=False):
-        st.markdown("**Sync Status:**")
-        
-        # Get all processed files from KB
-        kb_files = set()
-        for doc in st.session_state.rag_system.documents:
-            if 'filename' in doc:
-                kb_files.add(doc['filename'])
-        
-        st.info("📋 **Current KB Files:** " + str(len(kb_files)) + " files processed")
-        
-        if kb_files:
-            st.markdown("**Files in Knowledge Base:**")
-            for i, filename in enumerate(sorted(kb_files)[:10]):  # Show first 10
-                st.text(f"• {filename}")
-            if len(kb_files) > 10:
-                st.text(f"... and {len(kb_files) - 10} more files")
-        
-        st.markdown("---")
-        st.markdown("**⚠️ Vector Store Sync Required**")
-        st.warning("After adding new files to the KB, update the Assistant's Vector Store with these files:")
-        
-        # Show new files that need vector store sync
-        documents_dir = resolve_documents_dir() or "./Document Database"
-        new_files = st.session_state.rag_system.get_vector_store_sync_files(documents_dir)
-        
-        if new_files:
-            st.error(f"🆕 {len(new_files)} new files need Vector Store upload:")
-            for filename in new_files[:5]:  # Show first 5
-                st.text(f"• {Path(filename).name}")
-            if len(new_files) > 5:
-                st.text(f"... and {len(new_files) - 5} more files")
-            
-            st.markdown("**Action Required:**")
-            st.markdown("1. Go to OpenAI Assistant settings")
-            st.markdown("2. Upload these files to Vector Store")
-            st.markdown("3. Click 'Rebuild Index' to process locally")
-        else:
-            st.success("✅ All files are synced between KB and Vector Store")
     
     # Main interface
     col1, col2 = st.columns([2, 1])
