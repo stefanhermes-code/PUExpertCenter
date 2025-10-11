@@ -729,7 +729,7 @@ def main():
                 del st.session_state.valid_until
             st.rerun()
     
-    # Logo and title side by side
+    # Logo and title side by side with aligned tops
     col1, col2 = st.columns([1, 3])
     with col1:
         try:
@@ -737,17 +737,18 @@ def main():
         except:
             st.markdown("🧪")  # Fallback if logo not found
     with col2:
-        st.markdown("<h1 style='margin-top: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='margin-top: 0; margin-bottom: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
     
-    # Tagline with user info
+    # Tagline with user info - minimal spacing
     user_email = st.session_state.get('current_user', '')
     valid_until = st.session_state.get('valid_until', '')
     tagline = f"Corporate Version for user {user_email}"
     if valid_until:
         tagline += f" — valid until {valid_until}"
-    st.markdown(f"<p style='color: #666; margin-top: 0;'>{tagline}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color: #666; margin-top: 0; margin-bottom: 0;'>{tagline}</p>", unsafe_allow_html=True)
 
-    # Horizontal line and reduced space
+    # Minimal space before horizontal line
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications.")
     
