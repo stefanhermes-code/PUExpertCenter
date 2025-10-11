@@ -717,65 +717,40 @@ def main():
         initial_sidebar_state="collapsed"  # Hide sidebar for corporate version
     )
     
-    # Custom CSS for perfect centering and positioning
-    st.markdown("""
-    <style>
-    .header-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        margin: 0 auto;
-        max-width: 800px;
-    }
-    .logout-container {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-    }
-    .main-header {
-        margin-top: 20px;
-        margin-bottom: 10px;
-    }
-    .tagline {
-        color: #666;
-        margin-top: 5px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Logout button positioned absolutely in top right
-    st.markdown('<div class="logout-container">', unsafe_allow_html=True)
-    if st.button("🚪 Logout", use_container_width=True):
-        st.session_state.authenticated = False
-        if 'current_user' in st.session_state:
-            del st.session_state.current_user
-        if 'valid_until' in st.session_state:
-            del st.session_state.valid_until
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Header content with perfect centering
-    st.markdown('<div class="header-container">', unsafe_allow_html=True)
+    # Header with centered content using Streamlit columns
+    # Top row with logout button in top right
+    top_col1, top_col2, top_col3 = st.columns([8, 1, 1])
+    with top_col3:
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            if 'current_user' in st.session_state:
+                del st.session_state.current_user
+            if 'valid_until' in st.session_state:
+                del st.session_state.valid_until
+            st.rerun()
     
     # Logo centered
-    try:
-        st.image("PU ExpertCenter Logo V1.png", width=300)
-    except:
-        st.markdown("🧪")  # Fallback if logo not found
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        try:
+            st.image("PU ExpertCenter Logo V1.png", width=280)
+        except:
+            st.markdown("🧪")  # Fallback if logo not found
     
     # Title centered
-    st.markdown("<h1 class='main-header'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.markdown("<h1 style='text-align: center; margin-top: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
     
     # Tagline with user info
-    user_email = st.session_state.get('current_user', '')
-    valid_until = st.session_state.get('valid_until', '')
-    tagline = f"Corporate Version for user {user_email}"
-    if valid_until:
-        tagline += f" — valid until {valid_until}"
-    st.markdown(f"<p class='tagline'>{tagline}</p>", unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        user_email = st.session_state.get('current_user', '')
+        valid_until = st.session_state.get('valid_until', '')
+        tagline = f"Corporate Version for user {user_email}"
+        if valid_until:
+            tagline += f" — valid until {valid_until}"
+        st.markdown(f"<p style='text-align: center; color: #666; margin-top: 5px;'>{tagline}</p>", unsafe_allow_html=True)
 
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications.")
     
