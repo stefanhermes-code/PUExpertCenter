@@ -717,17 +717,20 @@ def main():
         initial_sidebar_state="collapsed"  # Hide sidebar for corporate version
     )
     
-    # Header with centered logo
-    # Logo centered
+    # Header with centered logo and aligned title
+    # Logo centered with reduced spacing
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         try:
-            st.image("PU ExpertCenter Logo V1.png", width=360)
+            st.image("PU ExpertCenter Logo V1.png", width=300)
         except:
             st.markdown("🧪")  # Fallback if logo not found
     
-    # Title centered
-    st.markdown("<h1 style='text-align: center;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
+    # Reduce space between logo and title
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Title centered and aligned with logo
+    st.markdown("<h1 style='text-align: center; margin-top: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
     
     # Tagline with user info
     user_email = st.session_state.get('current_user', '')
@@ -735,7 +738,7 @@ def main():
     tagline = f"Corporate Version for user {user_email}"
     if valid_until:
         tagline += f" — valid until {valid_until}"
-    st.markdown(f"<p style='text-align: center; color: #666;'>{tagline}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #666; margin-top: 5px;'>{tagline}</p>", unsafe_allow_html=True)
     
     # Top bar: right-aligned logout button
     top_left, top_right = st.columns([6, 1])
