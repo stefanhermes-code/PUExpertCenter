@@ -717,20 +717,55 @@ def main():
         initial_sidebar_state="collapsed"  # Hide sidebar for corporate version
     )
     
-    # Header with centered logo and aligned title
-    # Logo centered with reduced spacing
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        try:
-            st.image("PU ExpertCenter Logo V1.png", width=300)
-        except:
-            st.markdown("🧪")  # Fallback if logo not found
+    # Custom CSS for perfect centering and positioning
+    st.markdown("""
+    <style>
+    .header-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        margin: 0 auto;
+        max-width: 800px;
+    }
+    .logout-container {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .main-header {
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+    .tagline {
+        color: #666;
+        margin-top: 5px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    # Reduce space between logo and title
-    st.markdown("<br>", unsafe_allow_html=True)
+    # Logout button positioned absolutely in top right
+    st.markdown('<div class="logout-container">', unsafe_allow_html=True)
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.authenticated = False
+        if 'current_user' in st.session_state:
+            del st.session_state.current_user
+        if 'valid_until' in st.session_state:
+            del st.session_state.valid_until
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    # Title centered and aligned with logo
-    st.markdown("<h1 style='text-align: center; margin-top: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
+    # Header content with perfect centering
+    st.markdown('<div class="header-container">', unsafe_allow_html=True)
+    
+    # Logo centered
+    try:
+        st.image("PU ExpertCenter Logo V1.png", width=300)
+    except:
+        st.markdown("🧪")  # Fallback if logo not found
+    
+    # Title centered
+    st.markdown("<h1 class='main-header'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
     
     # Tagline with user info
     user_email = st.session_state.get('current_user', '')
@@ -738,18 +773,9 @@ def main():
     tagline = f"Corporate Version for user {user_email}"
     if valid_until:
         tagline += f" — valid until {valid_until}"
-    st.markdown(f"<p style='text-align: center; color: #666; margin-top: 5px;'>{tagline}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p class='tagline'>{tagline}</p>", unsafe_allow_html=True)
     
-    # Top bar: right-aligned logout button
-    top_left, top_right = st.columns([6, 1])
-    with top_right:
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.authenticated = False
-            if 'current_user' in st.session_state:
-                del st.session_state.current_user
-            if 'valid_until' in st.session_state:
-                del st.session_state.valid_until
-            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications.")
     
