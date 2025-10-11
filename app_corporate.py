@@ -729,25 +729,26 @@ def main():
                 del st.session_state.valid_until
             st.rerun()
     
-    # Logo centered
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    # Logo and title side by side
+    col1, col2 = st.columns([1, 3])
+    with col1:
         try:
-            st.image("PU ExpertCenter Logo V1.png", width=280)
+            st.image("PU ExpertCenter Logo V1.png", width=200)
         except:
             st.markdown("🧪")  # Fallback if logo not found
+    with col2:
+        st.markdown("<h1 style='margin-top: 0;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
     
-    # Title centered
-    st.markdown("<h1 style='text-align: center;'>Polyurethane ExpertCenter</h1>", unsafe_allow_html=True)
-    
-    # Tagline with user info - centered
+    # Tagline with user info
     user_email = st.session_state.get('current_user', '')
     valid_until = st.session_state.get('valid_until', '')
     tagline = f"Corporate Version for user {user_email}"
     if valid_until:
         tagline += f" — valid until {valid_until}"
-    st.markdown(f"<p style='text-align: center; color: #666;'>{tagline}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color: #666; margin-top: 0;'>{tagline}</p>", unsafe_allow_html=True)
 
+    # Horizontal line and reduced space
+    st.markdown("---")
     st.markdown("Ask questions about polyurethane foam technology, chemistry, and applications.")
     
     # Initialize RAG system
